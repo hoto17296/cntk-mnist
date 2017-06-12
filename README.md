@@ -1,4 +1,5 @@
 # CNTK MNIST
+For details, see [CNTK Tutorials](https://notebooks.azure.com/cntk/libraries/tutorials).
 
 ## Setup
 
