@@ -24,7 +24,7 @@ def create_reader(path, is_training, input_dim, label_dim):
 
 
 # Creates and trains a feedforward classification model for MNIST images
-def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_epochs=40):
+def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_epochs=40, block_size=3200):
     image_height = 28
     image_width  = 28
     num_channels = 1
@@ -60,9 +60,10 @@ def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_e
     mm_schedule      = C.learners.momentum_as_time_constant_schedule(mm_time_constant, epoch_size)
 
     # Instantiate the trainer object to drive the model training
-    learner = C.learners.momentum_sgd(z.parameters, lr_schedule, mm_schedule)
+    local_learner = C.learners.momentum_sgd(z.parameters, lr_schedule, mm_schedule)
+    parameter_learner = C.train.distributed.block_momentum_distributed_learner(local_learner, block_size=block_size)
     progress_printer = C.logging.ProgressPrinter(tag='Training', num_epochs=max_epochs)
-    trainer = C.Trainer(z, (ce, pe), learner, progress_printer)
+    trainer = C.Trainer(z, (ce, pe), parameter_learner, progress_printer)
 
     # define mapping from reader streams to network inputs
     input_map = {
@@ -72,54 +73,17 @@ def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_e
 
     C.logging.log_number_of_parameters(z) ; print()
 
-    # Get minibatches of images to train with and perform model training
-    for epoch in range(max_epochs):       # loop over epochs
-        sample_count = 0
-        while sample_count < epoch_size:  # loop over minibatches in the epoch
-            data = reader_train.next_minibatch(min(minibatch_size, epoch_size - sample_count), input_map=input_map) # fetch minibatch.
-            trainer.train_minibatch(data)                                   # update model with it
-            sample_count += data[label_var].num_samples                     # count samples processed so far
+    training_session(
+        trainer = trainer,
+        mb_source = reader_train,
+        model_inputs_to_streams = input_map,
+        mb_size = minibatch_size,
+        progress_frequency=epoch_size,
+        test_config = TestConfig(reader_test, minibatch_size=minibatch_size)
+    ).train()
 
-        trainer.summarize_training_progress()
-        z.save(os.path.join(model_path, "ConvNet_MNIST_{}.dnn".format(epoch)))
-
-    # Load test data
-    reader_test = create_reader(os.path.join(data_path, 'mnist_test.txt'), False, input_dim, num_output_classes)
-
-    input_map = {
-        input_var : reader_test.streams.features,
-        label_var : reader_test.streams.labels
-    }
-
-    # Test data for trained model
-    epoch_size = 10000
-    minibatch_size = 1024
-
-    # process minibatches and evaluate the model
-    metric_numer    = 0
-    metric_denom    = 0
-    sample_count    = 0
-    minibatch_index = 0
-
-    while sample_count < epoch_size:
-        current_minibatch = min(minibatch_size, epoch_size - sample_count)
-
-        # Fetch next test min batch.
-        data = reader_test.next_minibatch(current_minibatch, input_map=input_map)
-
-        # minibatch data to be trained with
-        metric_numer += trainer.test_minibatch(data) * current_minibatch
-        metric_denom += current_minibatch
-
-        # Keep track of the number of samples processed so far.
-        sample_count += data[label_var].num_samples
-        minibatch_index += 1
-
-    print("")
-    print("Final Results: Minibatch[1-{}]: errs = {:0.2f}% * {}".format(minibatch_index+1, (metric_numer*100.0)/metric_denom, metric_denom))
-    print("")
-
-    return metric_numer/metric_denom
+    # Must call MPI finalize when process exit without exceptions
+    C.train.distributed.Communicator.finalize()
 
 if __name__=='__main__':
     convnet_mnist()
