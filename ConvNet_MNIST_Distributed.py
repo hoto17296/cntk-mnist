@@ -52,6 +52,7 @@ def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_e
     pe = C.metrics.classification_error(z, label_var)
 
     reader_train = create_reader(os.path.join(data_path, 'mnist_train.txt'), True, input_dim, num_output_classes)
+    reader_test = create_reader(os.path.join(data_path, 'mnist_test.txt'), False, input_dim, num_output_classes)
 
     # Set learning parameters
     lr_per_sample    = [0.001]*10 + [0.0005]*10 + [0.0001]
@@ -73,13 +74,13 @@ def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_e
 
     C.logging.log_number_of_parameters(z) ; print()
 
-    training_session(
+    C.train.training_session(
         trainer = trainer,
         mb_source = reader_train,
         model_inputs_to_streams = input_map,
         mb_size = minibatch_size,
         progress_frequency=epoch_size,
-        test_config = TestConfig(reader_test, minibatch_size=minibatch_size)
+        test_config = C.train.TestConfig(reader_test, minibatch_size=minibatch_size)
     ).train()
 
     # Must call MPI finalize when process exit without exceptions
