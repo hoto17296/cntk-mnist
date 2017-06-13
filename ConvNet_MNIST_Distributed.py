@@ -80,6 +80,7 @@ def convnet_mnist(debug_output=False, epoch_size=60000, minibatch_size=64, max_e
         model_inputs_to_streams = input_map,
         mb_size = minibatch_size,
         progress_frequency=epoch_size,
+        max_samples = max_epochs * epoch_size,
         test_config = C.train.TestConfig(reader_test, minibatch_size=minibatch_size)
     ).train()
 
