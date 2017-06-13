@@ -27,5 +27,5 @@ $ docker build . -t cntk-1bit --build-arg ENABLE_1BIT_SGD=true
 ```
 
 ``` console
-$ nvidia-docker run --rm -it -v $(pwd):/work -w /work cntk-1bit bash -c "source /cntk/activate-cntk && mpiexec -n $GPU_COUNT python ConvNet_MNIST_Distributed.py"
+$ nvidia-docker run --rm -it -v $(pwd):/work -w /work cntk-1bit mpiexec -n $GPU_COUNT --allow-run-as-root python ConvNet_MNIST_Distributed.py
 ```
